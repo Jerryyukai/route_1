@@ -1,0 +1,2073 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通勤路线规划助手</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- 高德地图 JS API -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=a8a69c74031c9c30ae768bf1bd5e37ad&plugin=AMap.Driving,AMap.Transfer,AMap.Walking"></script>
+    <style>
+        :root {
+            --primary: #0ea5e9;
+            --primary-dark: #0284c7;
+            --primary-light: #38bdf8;
+            --secondary: #f97316;
+            --accent: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #475569;
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(249, 115, 22, 0.1) 0%, transparent 60%),
+                var(--bg-dark);
+        }
+
+        .floating-shapes {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.1;
+            animation: float 20s infinite ease-in-out;
+        }
+
+        .shape:nth-child(1) {
+            width: 300px;
+            height: 300px;
+            background: var(--primary);
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 200px;
+            height: 200px;
+            background: var(--accent);
+            top: 60%;
+            right: 10%;
+            animation-delay: -5s;
+        }
+
+        .shape:nth-child(3) {
+            width: 150px;
+            height: 150px;
+            background: var(--secondary);
+            bottom: 20%;
+            left: 30%;
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(50px, -50px) rotate(90deg); }
+            50% { transform: translate(0, -100px) rotate(180deg); }
+            75% { transform: translate(-50px, -50px) rotate(270deg); }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background: var(--gradient-3);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            box-shadow: 0 10px 40px rgba(79, 172, 254, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .route-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .location-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--bg-card);
+            border-radius: 30px;
+            border: 1px solid var(--border);
+        }
+
+        .location-badge .icon {
+            font-size: 20px;
+        }
+
+        .arrow-icon {
+            font-size: 24px;
+            color: var(--primary);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        .deadline-badge {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            padding: 10px 25px;
+            border-radius: 30px;
+            font-weight: 500;
+            box-shadow: 0 5px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        /* Transport Buttons */
+        .transport-section {
+            margin-bottom: 40px;
+            animation: fadeIn 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+        }
+
+        .transport-buttons {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .transport-btn {
+            flex: 1;
+            min-width: 200px;
+            padding: 25px 30px;
+            border: 2px solid transparent;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-family: inherit;
+            font-size: 1.1rem;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .transport-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .transport-btn:hover::before {
+            opacity: 1;
+        }
+
+        .transport-btn.taxi {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--secondary);
+        }
+
+        .transport-btn.taxi::before {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.05));
+        }
+
+        .transport-btn.taxi:hover, .transport-btn.taxi.active {
+            background: linear-gradient(135deg, var(--secondary), #ea580c);
+            box-shadow: 0 10px 40px rgba(249, 115, 22, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .transport-btn.metro {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--primary);
+        }
+
+        .transport-btn.metro::before {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.05));
+        }
+
+        .transport-btn.metro:hover, .transport-btn.metro.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            box-shadow: 0 10px 40px rgba(14, 165, 233, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .transport-btn.bus {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--success);
+        }
+
+        .transport-btn.bus::before {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05));
+        }
+
+        .transport-btn.bus:hover, .transport-btn.bus.active {
+            background: linear-gradient(135deg, var(--success), #059669);
+            box-shadow: 0 10px 40px rgba(16, 185, 129, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .transport-btn .icon {
+            font-size: 32px;
+        }
+
+        .transport-btn .label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .transport-btn .label span:last-child {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+
+        /* Routes Panel */
+        .routes-panel {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border);
+            display: none;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .routes-panel.active {
+            display: block;
+        }
+
+        .routes-panel h3 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .route-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .route-btn {
+            flex: 1;
+            min-width: 280px;
+            padding: 20px;
+            background: var(--bg-dark);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            color: var(--text-primary);
+            text-align: left;
+        }
+
+        .route-btn:hover {
+            border-color: var(--primary);
+            background: var(--bg-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .route-btn.active {
+            border-color: var(--primary);
+            background: rgba(14, 165, 233, 0.1);
+        }
+
+        .route-btn .route-name {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .route-btn .route-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .route-btn .route-stats span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Route Details */
+        .route-details {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border);
+            display: none;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .route-details.active {
+            display: block;
+        }
+
+        .details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .details-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .details-summary {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .summary-item {
+            text-align: center;
+            padding: 15px 25px;
+            background: var(--bg-dark);
+            border-radius: 16px;
+            min-width: 120px;
+        }
+
+        .summary-item .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--gradient-3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .summary-item .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .summary-item.cost .value {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Map Container */
+        .map-container {
+            width: 100%;
+            height: 450px;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 25px;
+            border: 2px solid var(--border);
+            position: relative;
+        }
+
+        .map-container::before {
+            content: '🗺️ 加载地图中...';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            z-index: 1;
+        }
+
+        #routeMap {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .map-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 15px 20px;
+            background: var(--bg-dark);
+            border-radius: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.start {
+            background: #22c55e;
+        }
+
+        .legend-dot.end {
+            background: #ef4444;
+        }
+
+        .legend-line {
+            width: 30px;
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        .legend-line.driving {
+            background: #f97316;
+        }
+
+        .legend-line.metro {
+            background: #0ea5e9;
+        }
+
+        .legend-line.bus {
+            background: #10b981;
+        }
+
+        .legend-line.walking {
+            background: #94a3b8;
+            background: repeating-linear-gradient(
+                90deg,
+                #94a3b8,
+                #94a3b8 4px,
+                transparent 4px,
+                transparent 8px
+            );
+        }
+
+        /* Route Timeline */
+        .route-timeline {
+            position: relative;
+            padding-left: 40px;
+        }
+
+        .route-timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, var(--primary), var(--accent), var(--success));
+            border-radius: 3px;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding: 20px;
+            background: var(--bg-dark);
+            border-radius: 16px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .timeline-item:hover {
+            border-color: var(--primary);
+            transform: translateX(5px);
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -32px;
+            top: 28px;
+            width: 16px;
+            height: 16px;
+            background: var(--bg-card);
+            border: 3px solid var(--primary);
+            border-radius: 50%;
+        }
+
+        .timeline-item.walking::before {
+            border-color: var(--text-secondary);
+        }
+
+        .timeline-item.transit::before {
+            border-color: var(--primary);
+        }
+
+        .timeline-item.bus-transit::before {
+            border-color: var(--success);
+        }
+
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .timeline-type {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .timeline-type .icon {
+            font-size: 24px;
+        }
+
+        .timeline-duration {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .timeline-content {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .timeline-stops {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .stop-tag {
+            padding: 5px 12px;
+            background: var(--bg-hover);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .stop-tag.highlight {
+            background: rgba(14, 165, 233, 0.2);
+            border-color: var(--primary);
+            color: var(--primary-light);
+        }
+
+        /* Time Checker Section */
+        .time-checker {
+            background: linear-gradient(135deg, var(--bg-card), rgba(139, 92, 246, 0.1));
+            border-radius: 24px;
+            padding: 35px;
+            border: 2px solid var(--accent);
+            margin-bottom: 30px;
+            animation: fadeIn 0.8s ease-out 0.4s both;
+        }
+
+        .time-checker h2 {
+            font-size: 1.4rem;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .time-checker h2 .icon {
+            font-size: 28px;
+        }
+
+        .checker-content {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        .time-input-group {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .time-input-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .time-input {
+            width: 100%;
+            padding: 15px 20px;
+            background: var(--bg-dark);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .time-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .station-select-group {
+            flex: 2;
+            min-width: 300px;
+            display: none;
+        }
+
+        .station-select-group.active {
+            display: block;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .station-question {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--warning);
+        }
+
+        .station-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .station-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .station-grid::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+            border-radius: 3px;
+        }
+
+        .station-grid::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .station-btn {
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        .station-btn:hover {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+
+        .station-btn.selected {
+            border-color: var(--accent);
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .station-btn .line-tag {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Result Display */
+        .result-display {
+            margin-top: 25px;
+            padding: 25px;
+            border-radius: 16px;
+            display: none;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        .result-display.active {
+            display: block;
+        }
+
+        .result-display.safe {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05));
+            border: 2px solid var(--success);
+        }
+
+        .result-display.warning {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.05));
+            border: 2px solid var(--warning);
+        }
+
+        .result-display.danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05));
+            border: 2px solid var(--danger);
+        }
+
+        .result-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .result-message {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .result-detail {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .container {
+                padding: 20px 15px;
+            }
+
+            .transport-btn {
+                min-width: 100%;
+            }
+
+            .route-btn {
+                min-width: 100%;
+            }
+
+            .checker-content {
+                flex-direction: column;
+            }
+
+            .details-summary {
+                justify-content: center;
+            }
+
+            .map-container {
+                height: 350px;
+            }
+        }
+
+        /* 高德地图信息窗口样式覆盖 */
+        .amap-info-content {
+            padding: 10px 15px;
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+
+        .custom-marker {
+            background: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🚀</div>
+                <h1>通勤路线规划助手</h1>
+            </div>
+            <div class="route-info">
+                <div class="location-badge">
+                    <span class="icon">🏠</span>
+                    <span>上海马戏城</span>
+                </div>
+                <span class="arrow-icon">➔</span>
+                <div class="location-badge">
+                    <span class="icon">🏢</span>
+                    <span>上海数据交易所</span>
+                </div>
+                <div class="deadline-badge">
+                    ⏰ 须在 09:00 前到达
+                </div>
+            </div>
+        </header>
+
+        <section class="transport-section">
+            <h2 class="section-title">选择出行方式</h2>
+            <div class="transport-buttons">
+                <button class="transport-btn taxi" onclick="selectTransport('taxi')">
+                    <span class="icon">🚕</span>
+                    <div class="label">
+                        <span>打车</span>
+                        <span>约32分钟 · ¥60-80</span>
+                    </div>
+                </button>
+                <button class="transport-btn metro" onclick="selectTransport('metro')">
+                    <span class="icon">🚇</span>
+                    <div class="label">
+                        <span>地铁</span>
+                        <span>约79分钟 · ¥6</span>
+                    </div>
+                </button>
+                <button class="transport-btn bus" onclick="selectTransport('bus')">
+                    <span class="icon">🚌</span>
+                    <div class="label">
+                        <span>公交车</span>
+                        <span>约81-94分钟 · ¥4-8</span>
+                    </div>
+                </button>
+            </div>
+        </section>
+
+        <!-- 打车路线 -->
+        <div id="taxi-routes" class="routes-panel">
+            <h3>🚕 打车路线方案</h3>
+            <div class="route-options">
+                <button class="route-btn" onclick="selectRoute('taxi', 0)">
+                    <div class="route-name">🛣️ 中环路线</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约32分钟</span>
+                        <span>📏 26公里</span>
+                        <span>💰 ¥60-80</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 地铁路线 -->
+        <div id="metro-routes" class="routes-panel">
+            <h3>🚇 地铁路线方案</h3>
+            <div class="route-options">
+                <button class="route-btn" onclick="selectRoute('metro', 0)">
+                    <div class="route-name">🔵 1号线 → 2号线（纯地铁）</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约79分钟</span>
+                        <span>🚶 步行2.4km</span>
+                        <span>💰 ¥6</span>
+                    </div>
+                </button>
+                <button class="route-btn" onclick="selectRoute('metro', 1)">
+                    <div class="route-name">🔵 1号线 → 2号线 + 1058路</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约81分钟</span>
+                        <span>🚶 步行1.4km</span>
+                        <span>💰 ¥8</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 公交路线 -->
+        <div id="bus-routes" class="routes-panel">
+            <h3>🚌 公交路线方案</h3>
+            <div class="route-options">
+                <button class="route-btn" onclick="selectRoute('bus', 0)">
+                    <div class="route-name">🟢 46路 → 2号线 + 1058路</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约94分钟</span>
+                        <span>🚶 步行1.4km</span>
+                        <span>💰 ¥10</span>
+                    </div>
+                </button>
+                <button class="route-btn" onclick="selectRoute('bus', 1)">
+                    <div class="route-name">🟢 46路 → 451路 → 989路</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约124分钟</span>
+                        <span>🚶 步行1.4km</span>
+                        <span>💰 ¥6</span>
+                    </div>
+                </button>
+                <button class="route-btn" onclick="selectRoute('bus', 2)">
+                    <div class="route-name">🟢 95路 → 2号线</div>
+                    <div class="route-stats">
+                        <span>⏱️ 约97分钟</span>
+                        <span>🚶 步行2.8km</span>
+                        <span>💰 ¥8</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 路线详情 -->
+        <div id="route-details" class="route-details">
+            <div class="details-header">
+                <h3 class="details-title" id="details-title">路线详情</h3>
+                <div class="details-summary" id="details-summary">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 地图容器 -->
+            <div class="map-container">
+                <div id="routeMap"></div>
+            </div>
+            
+            <!-- 地图图例 -->
+            <div class="map-legend">
+                <div class="legend-item">
+                    <div class="legend-dot start"></div>
+                    <span>起点</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot end"></div>
+                    <span>终点</span>
+                </div>
+                <div class="legend-item" id="legend-driving" style="display: none;">
+                    <div class="legend-line driving"></div>
+                    <span>驾车路线</span>
+                </div>
+                <div class="legend-item" id="legend-metro" style="display: none;">
+                    <div class="legend-line metro"></div>
+                    <span>地铁线路</span>
+                </div>
+                <div class="legend-item" id="legend-bus" style="display: none;">
+                    <div class="legend-line bus"></div>
+                    <span>公交线路</span>
+                </div>
+                <div class="legend-item" id="legend-walking" style="display: none;">
+                    <div class="legend-line walking"></div>
+                    <span>步行路线</span>
+                </div>
+            </div>
+            
+            <div class="route-timeline" id="route-timeline">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <!-- 时间检查器 -->
+        <section class="time-checker">
+            <h2><span class="icon">⏰</span> 通勤时间检查器</h2>
+            <div class="checker-content">
+                <div class="time-input-group">
+                    <label>选择当前时间</label>
+                    <input type="time" class="time-input" id="currentTime" onchange="onTimeSelect()">
+                </div>
+                <div class="station-select-group" id="stationSelectGroup">
+                    <div class="station-question">📍 你现在到哪儿了？</div>
+                    <div class="station-grid" id="stationGrid">
+                        <!-- 动态生成站点 -->
+                    </div>
+                </div>
+            </div>
+            <div class="result-display" id="resultDisplay">
+                <div class="result-icon" id="resultIcon"></div>
+                <div class="result-message" id="resultMessage"></div>
+                <div class="result-detail" id="resultDetail"></div>
+            </div>
+        </section>
+
+        <footer>
+            <p>数据来源：<a href="https://lbs.amap.com" target="_blank">高德地图开放平台</a></p>
+            <p>© 2025 通勤路线规划助手 | 祝您通勤顺利！</p>
+        </footer>
+    </div>
+
+    <script>
+        // 起点和终点坐标
+        const originCoord = [121.451111, 31.277829]; // 上海马戏城
+        const destCoord = [121.628845, 31.221087];   // 上海数据交易所
+
+        // 地图实例
+        let map = null;
+        let currentPolylines = [];
+        let currentMarkers = [];
+
+        // 地铁站点坐标数据
+        const stationCoords = {
+            // 1号线站点
+            '上海马戏城': [121.452026, 31.279892],
+            '延长路': [121.455789, 31.268456],
+            '中山北路': [121.458123, 31.258789],
+            '上海火车站': [121.460789, 31.249456],
+            '汉中路': [121.464123, 31.241789],
+            '新闸路': [121.468456, 31.237123],
+            '人民广场': [121.472656, 31.233160],
+            // 2号线站点
+            '南京东路': [121.481234, 31.238567],
+            '陆家嘴': [121.499876, 31.240123],
+            '浦东南路(原东昌路)': [121.514567, 31.234890],
+            '世纪大道': [121.527123, 31.229456],
+            '上海科技馆': [121.544678, 31.220123],
+            '世纪公园': [121.556789, 31.214567],
+            '龙阳路': [121.567890, 31.207654],
+            '张江高科': [121.590123, 31.203456],
+            '金科路': [121.605678, 31.208901],
+            '广兰路': [121.621071, 31.211046],
+            // 46路公交站点
+            '共和新路大宁路': [121.452492, 31.276728],
+            '共和新路延长中路': [121.454321, 31.267890],
+            '闸北公园': [121.456789, 31.259012],
+            '共和新路中山北路': [121.458901, 31.252345],
+            '共和新路中华新路': [121.460123, 31.245678],
+            '中兴路共和新路': [121.462345, 31.240901],
+            '西藏北路永兴路': [121.470123, 31.238456],
+            '西藏北路曲阜路': [121.472345, 31.236789],
+            '西藏中路北京东路': [121.473709, 31.236719],
+            // 95路公交站点
+            '共和新路中兴路': [121.461234, 31.241567],
+            '成都北路新闸路': [121.465678, 31.234890],
+            '成都北路北京西路': [121.466217, 31.233330],
+            // 451路公交站点
+            '西藏南路宁海东路': [121.478790, 31.227825],
+            '复兴东路老西门': [121.489012, 31.223456],
+            '崂山路张杨路': [121.510234, 31.235678],
+            '崂山路潍坊路': [121.515678, 31.230901],
+            '浦电路崂山路': [121.520901, 31.226234],
+            '东方路峨山路': [121.530123, 31.221567],
+            '东方路蓝村路': [121.535456, 31.217890],
+            '浦建路杨高南路': [121.550789, 31.208123],
+            '浦建路锦绣路': [121.560012, 31.203456],
+            // 989路公交站点
+            '樱花路浦建路': [121.562345, 31.205678],
+            '梅花路海桐路': [121.568901, 31.208012],
+            '白杨路樱花路': [121.573234, 31.210345],
+            '龙阳路地铁站': [121.567890, 31.207654],
+            '龙阳路芳甸路': [121.580123, 31.212678],
+            '龙东大道科苑路': [121.595456, 31.216901],
+            '龙东大道金科路': [121.605789, 31.219234],
+            '龙东大道张江路': [121.615012, 31.221567],
+            '龙东大道广兰路': [121.622345, 31.222890],
+            '龙东大道申江路': [121.628678, 31.223123],
+            '龙东大道张东路': [121.632988, 31.223932],
+            // 1058路公交站点
+            '祖冲之路广兰路': [121.620773, 31.211189],
+            '广兰路祖冲之路': [121.619234, 31.212456],
+            '丹桂路广兰路': [121.621567, 31.215789],
+            '丹桂路申江路': [121.625890, 31.218012],
+            '丹桂路金秋路': [121.629123, 31.220345],
+            '张东路龙东大道': [121.632370, 31.221949]
+        };
+
+        // 路线数据
+        const routesData = {
+            taxi: [{
+                name: '中环路线',
+                duration: 32,
+                distance: 26,
+                cost: '60-80',
+                type: 'driving',
+                pathCoords: [
+                    [121.451111, 31.277829],
+                    [121.451111, 31.278829],
+                    [121.452111, 31.279829],
+                    [121.451111, 31.277829],
+                    [121.451111, 31.284829],
+                    [121.456111, 31.290829],
+                    [121.470111, 31.295829],
+                    [121.520111, 31.295829],
+                    [121.570111, 31.280829],
+                    [121.590111, 31.265829],
+                    [121.600111, 31.250829],
+                    [121.610111, 31.235829],
+                    [121.625111, 31.225829],
+                    [121.628845, 31.221087]
+                ],
+                steps: [
+                    { type: 'driving', instruction: '沿共和新路向北行驶', duration: 2 },
+                    { type: 'driving', instruction: '进入南北高架路', duration: 2 },
+                    { type: 'driving', instruction: '沿中环路向东行驶', duration: 15 },
+                    { type: 'driving', instruction: '经军工路隧道过江', duration: 5 },
+                    { type: 'driving', instruction: '沿中环路继续向东南', duration: 5 },
+                    { type: 'driving', instruction: '经云顺路、申江路到达丹桂路', duration: 3 }
+                ]
+            }],
+            metro: [{
+                name: '1号线 → 2号线（纯地铁）',
+                duration: 79,
+                walkDistance: 2.4,
+                cost: 6,
+                type: 'transit',
+                segments: [
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至上海马戏城站（3号口）',
+                        duration: 6,
+                        distance: 424,
+                        coords: [[121.451111, 31.277829], [121.452026, 31.279892]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁1号线',
+                        from: '上海马戏城',
+                        to: '人民广场',
+                        duration: 15,
+                        cost: 3,
+                        stops: ['延长路', '中山北路', '上海火车站', '汉中路', '新闸路'],
+                        color: '#e4002b'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '站内换乘',
+                        duration: 4,
+                        distance: 274,
+                        coords: [[121.472656, 31.233160], [121.472656, 31.233160]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁2号线',
+                        from: '人民广场',
+                        to: '广兰路',
+                        duration: 31,
+                        cost: 3,
+                        stops: ['南京东路', '陆家嘴', '浦东南路(原东昌路)', '世纪大道', '上海科技馆', '世纪公园', '龙阳路', '张江高科', '金科路'],
+                        color: '#97d700'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '从广兰路站1号口出站，步行至上海数据交易所',
+                        duration: 24,
+                        distance: 1684,
+                        coords: [[121.621071, 31.211046], [121.628845, 31.221087]]
+                    }
+                ]
+            }, {
+                name: '1号线 → 2号线 + 1058路',
+                duration: 81,
+                walkDistance: 1.4,
+                cost: 8,
+                type: 'transit',
+                segments: [
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至上海马戏城站（3号口）',
+                        duration: 6,
+                        distance: 424,
+                        coords: [[121.451111, 31.277829], [121.452026, 31.279892]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁1号线',
+                        from: '上海马戏城',
+                        to: '人民广场',
+                        duration: 15,
+                        cost: 3,
+                        stops: ['延长路', '中山北路', '上海火车站', '汉中路', '新闸路'],
+                        color: '#e4002b'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '站内换乘',
+                        duration: 4,
+                        distance: 274,
+                        coords: [[121.472656, 31.233160], [121.472656, 31.233160]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁2号线',
+                        from: '人民广场',
+                        to: '广兰路',
+                        duration: 31,
+                        cost: 3,
+                        stops: ['南京东路', '陆家嘴', '浦东南路(原东昌路)', '世纪大道', '上海科技馆', '世纪公园', '龙阳路', '张江高科', '金科路'],
+                        color: '#97d700'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至祖冲之路广兰路站',
+                        duration: 3,
+                        distance: 225,
+                        coords: [[121.621071, 31.211046], [121.620773, 31.211189]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '1058路',
+                        from: '祖冲之路广兰路',
+                        to: '张东路龙东大道',
+                        duration: 16,
+                        cost: 2,
+                        stops: ['广兰路祖冲之路', '丹桂路广兰路', '丹桂路申江路', '丹桂路金秋路'],
+                        color: '#10b981'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至上海数据交易所',
+                        duration: 7,
+                        distance: 481,
+                        coords: [[121.632370, 31.221949], [121.628845, 31.221087]]
+                    }
+                ]
+            }],
+            bus: [{
+                name: '46路 → 2号线 + 1058路',
+                duration: 94,
+                walkDistance: 1.4,
+                cost: 10,
+                type: 'transit',
+                segments: [
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至共和新路大宁路站',
+                        duration: 3,
+                        distance: 224,
+                        coords: [[121.451111, 31.277829], [121.452492, 31.276728]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '46路',
+                        from: '共和新路大宁路',
+                        to: '西藏中路北京东路',
+                        duration: 27,
+                        cost: 2,
+                        stops: ['共和新路延长中路', '闸北公园', '共和新路中山北路', '共和新路中华新路', '中兴路共和新路', '西藏北路永兴路', '西藏北路曲阜路'],
+                        color: '#10b981'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至人民广场站（7号口）',
+                        duration: 7,
+                        distance: 515,
+                        coords: [[121.473709, 31.236719], [121.472656, 31.233160]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁2号线',
+                        from: '人民广场',
+                        to: '广兰路',
+                        duration: 31,
+                        cost: 6,
+                        stops: ['南京东路', '陆家嘴', '浦东南路(原东昌路)', '世纪大道', '上海科技馆', '世纪公园', '龙阳路', '张江高科', '金科路'],
+                        color: '#97d700'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至祖冲之路广兰路站',
+                        duration: 3,
+                        distance: 225,
+                        coords: [[121.621071, 31.211046], [121.620773, 31.211189]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '1058路',
+                        from: '祖冲之路广兰路',
+                        to: '张东路龙东大道',
+                        duration: 16,
+                        cost: 2,
+                        stops: ['广兰路祖冲之路', '丹桂路广兰路', '丹桂路申江路', '丹桂路金秋路'],
+                        color: '#10b981'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至上海数据交易所',
+                        duration: 7,
+                        distance: 481,
+                        coords: [[121.632370, 31.221949], [121.628845, 31.221087]]
+                    }
+                ]
+            }, {
+                name: '46路 → 451路 → 989路',
+                duration: 124,
+                walkDistance: 1.4,
+                cost: 6,
+                type: 'transit',
+                segments: [
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至共和新路大宁路站',
+                        duration: 3,
+                        distance: 224,
+                        coords: [[121.451111, 31.277829], [121.452492, 31.276728]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '46路',
+                        from: '共和新路大宁路',
+                        to: '人民广场',
+                        duration: 32,
+                        cost: 2,
+                        stops: ['共和新路延长中路', '闸北公园', '共和新路中山北路', '共和新路中华新路', '中兴路共和新路', '西藏北路永兴路', '西藏北路曲阜路', '西藏中路北京东路'],
+                        color: '#10b981'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至西藏南路宁海东路站',
+                        duration: 5,
+                        distance: 364,
+                        coords: [[121.476852, 31.228376], [121.478790, 31.227825]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '451路',
+                        from: '西藏南路宁海东路',
+                        to: '浦建路锦绣路',
+                        duration: 36,
+                        cost: 2,
+                        stops: ['复兴东路老西门', '崂山路张杨路', '崂山路潍坊路', '浦电路崂山路', '东方路峨山路', '东方路蓝村路', '浦建路杨高南路'],
+                        color: '#f59e0b'
+                    },
+                    { 
+                        type: 'bus',
+                        line: '989路',
+                        from: '浦建路锦绣路',
+                        to: '龙东大道张东路',
+                        duration: 36,
+                        cost: 2,
+                        stops: ['樱花路浦建路', '梅花路海桐路', '白杨路樱花路', '龙阳路地铁站', '龙阳路芳甸路', '龙东大道科苑路', '龙东大道金科路', '龙东大道张江路', '龙东大道广兰路', '龙东大道申江路'],
+                        color: '#8b5cf6'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至上海数据交易所',
+                        duration: 11,
+                        distance: 779,
+                        coords: [[121.632988, 31.223932], [121.628845, 31.221087]]
+                    }
+                ]
+            }, {
+                name: '95路 → 2号线',
+                duration: 97,
+                walkDistance: 2.8,
+                cost: 8,
+                type: 'transit',
+                segments: [
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至共和新路大宁路站',
+                        duration: 3,
+                        distance: 224,
+                        coords: [[121.451111, 31.277829], [121.452492, 31.276728]]
+                    },
+                    { 
+                        type: 'bus',
+                        line: '95路',
+                        from: '共和新路大宁路',
+                        to: '成都北路北京西路',
+                        duration: 27,
+                        cost: 2,
+                        stops: ['共和新路延长中路', '闸北公园', '共和新路中山北路', '共和新路中华新路', '共和新路中兴路', '成都北路新闸路'],
+                        color: '#10b981'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '步行至人民广场站（11号口）',
+                        duration: 12,
+                        distance: 876,
+                        coords: [[121.466217, 31.233330], [121.472649, 31.233156]]
+                    },
+                    { 
+                        type: 'metro',
+                        line: '地铁2号线',
+                        from: '人民广场',
+                        to: '广兰路',
+                        duration: 31,
+                        cost: 6,
+                        stops: ['南京东路', '陆家嘴', '浦东南路(原东昌路)', '世纪大道', '上海科技馆', '世纪公园', '龙阳路', '张江高科', '金科路'],
+                        color: '#97d700'
+                    },
+                    { 
+                        type: 'walking', 
+                        instruction: '从广兰路站1号口出站，步行至上海数据交易所',
+                        duration: 24,
+                        distance: 1684,
+                        coords: [[121.621071, 31.211046], [121.628845, 31.221087]]
+                    }
+                ]
+            }]
+        };
+
+        // 所有站点信息（用于时间检查）
+        const allStations = {
+            '1号线': {
+                stations: ['上海马戏城', '延长路', '中山北路', '上海火车站', '汉中路', '新闸路', '人民广场'],
+                avgTimePerStop: 2.5,
+                stationIndex: {
+                    '上海马戏城': 0, '延长路': 1, '中山北路': 2, '上海火车站': 3, 
+                    '汉中路': 4, '新闸路': 5, '人民广场': 6
+                }
+            },
+            '2号线': {
+                stations: ['人民广场', '南京东路', '陆家嘴', '浦东南路(原东昌路)', '世纪大道', 
+                          '上海科技馆', '世纪公园', '龙阳路', '张江高科', '金科路', '广兰路'],
+                avgTimePerStop: 2.8,
+                stationIndex: {
+                    '人民广场': 0, '南京东路': 1, '陆家嘴': 2, '浦东南路(原东昌路)': 3,
+                    '世纪大道': 4, '上海科技馆': 5, '世纪公园': 6, '龙阳路': 7,
+                    '张江高科': 8, '金科路': 9, '广兰路': 10
+                }
+            },
+            '46路': {
+                stations: ['共和新路大宁路', '共和新路延长中路', '闸北公园', '共和新路中山北路', 
+                          '共和新路中华新路', '中兴路共和新路', '西藏北路永兴路', '西藏北路曲阜路', 
+                          '西藏中路北京东路', '人民广场'],
+                avgTimePerStop: 3.2,
+                stationIndex: {
+                    '共和新路大宁路': 0, '共和新路延长中路': 1, '闸北公园': 2, 
+                    '共和新路中山北路': 3, '共和新路中华新路': 4, '中兴路共和新路': 5,
+                    '西藏北路永兴路': 6, '西藏北路曲阜路': 7, '西藏中路北京东路': 8, '人民广场': 9
+                }
+            },
+            '95路': {
+                stations: ['共和新路大宁路', '共和新路延长中路', '闸北公园', '共和新路中山北路', 
+                          '共和新路中华新路', '共和新路中兴路', '成都北路新闸路', '成都北路北京西路'],
+                avgTimePerStop: 3.2,
+                stationIndex: {
+                    '共和新路大宁路': 0, '共和新路延长中路': 1, '闸北公园': 2, 
+                    '共和新路中山北路': 3, '共和新路中华新路': 4, '共和新路中兴路': 5,
+                    '成都北路新闸路': 6, '成都北路北京西路': 7
+                }
+            },
+            '451路': {
+                stations: ['西藏南路宁海东路', '复兴东路老西门', '崂山路张杨路', '崂山路潍坊路', 
+                          '浦电路崂山路', '东方路峨山路', '东方路蓝村路', '浦建路杨高南路', '浦建路锦绣路'],
+                avgTimePerStop: 4,
+                stationIndex: {
+                    '西藏南路宁海东路': 0, '复兴东路老西门': 1, '崂山路张杨路': 2,
+                    '崂山路潍坊路': 3, '浦电路崂山路': 4, '东方路峨山路': 5,
+                    '东方路蓝村路': 6, '浦建路杨高南路': 7, '浦建路锦绣路': 8
+                }
+            },
+            '989路': {
+                stations: ['浦建路锦绣路', '樱花路浦建路', '梅花路海桐路', '白杨路樱花路', 
+                          '龙阳路地铁站', '龙阳路芳甸路', '龙东大道科苑路', '龙东大道金科路', 
+                          '龙东大道张江路', '龙东大道广兰路', '龙东大道申江路', '龙东大道张东路'],
+                avgTimePerStop: 3,
+                stationIndex: {
+                    '浦建路锦绣路': 0, '樱花路浦建路': 1, '梅花路海桐路': 2, '白杨路樱花路': 3,
+                    '龙阳路地铁站': 4, '龙阳路芳甸路': 5, '龙东大道科苑路': 6, '龙东大道金科路': 7,
+                    '龙东大道张江路': 8, '龙东大道广兰路': 9, '龙东大道申江路': 10, '龙东大道张东路': 11
+                }
+            },
+            '1058路': {
+                stations: ['祖冲之路广兰路', '广兰路祖冲之路', '丹桂路广兰路', '丹桂路申江路', 
+                          '丹桂路金秋路', '张东路龙东大道'],
+                avgTimePerStop: 3,
+                stationIndex: {
+                    '祖冲之路广兰路': 0, '广兰路祖冲之路': 1, '丹桂路广兰路': 2, 
+                    '丹桂路申江路': 3, '丹桂路金秋路': 4, '张东路龙东大道': 5
+                }
+            }
+        };
+
+        // 计算从当前站点到目的地剩余时间的函数
+        function calculateRemainingTime(lineName, currentStation) {
+            const line = allStations[lineName];
+            if (!line) return null;
+            
+            const currentIndex = line.stationIndex[currentStation];
+            if (currentIndex === undefined) return null;
+            
+            const totalStations = Object.keys(line.stationIndex).length;
+            const remainingStops = totalStations - currentIndex - 1;
+            
+            let remainingTime = remainingStops * line.avgTimePerStop;
+            
+            if (lineName === '1号线') {
+                remainingTime += 4;
+                remainingTime += 10 * 2.8;
+                remainingTime += 24;
+            } else if (lineName === '2号线') {
+                remainingTime += 24;
+            } else if (lineName === '46路' || lineName === '95路') {
+                remainingTime += 10;
+                remainingTime += 10 * 2.8;
+                remainingTime += 24;
+            } else if (lineName === '451路') {
+                remainingTime += 36;
+                remainingTime += 11;
+            } else if (lineName === '989路') {
+                remainingTime += 11;
+            } else if (lineName === '1058路') {
+                remainingTime += 7;
+            }
+            
+            return Math.ceil(remainingTime);
+        }
+
+        let currentTransport = null;
+        let currentRoute = null;
+        let selectedTime = null;
+
+        // 初始化地图
+        function initMap() {
+            map = new AMap.Map('routeMap', {
+                zoom: 12,
+                center: [121.54, 31.24],
+                mapStyle: 'amap://styles/dark'
+            });
+        }
+
+        // 清除地图上的所有覆盖物
+        function clearMap() {
+            if (currentPolylines.length > 0) {
+                map.remove(currentPolylines);
+                currentPolylines = [];
+            }
+            if (currentMarkers.length > 0) {
+                map.remove(currentMarkers);
+                currentMarkers = [];
+            }
+        }
+
+        // 添加起点终点标记
+        function addStartEndMarkers() {
+            // 起点标记
+            const startMarker = new AMap.Marker({
+                position: originCoord,
+                content: '<div style="background:#22c55e;color:white;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:bold;box-shadow:0 2px 10px rgba(34,197,94,0.5);white-space:nowrap;">🏠 上海马戏城</div>',
+                offset: new AMap.Pixel(-60, -40)
+            });
+            
+            // 终点标记
+            const endMarker = new AMap.Marker({
+                position: destCoord,
+                content: '<div style="background:#ef4444;color:white;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:bold;box-shadow:0 2px 10px rgba(239,68,68,0.5);white-space:nowrap;">🏢 上海数据交易所</div>',
+                offset: new AMap.Pixel(-70, -40)
+            });
+            
+            currentMarkers.push(startMarker, endMarker);
+            map.add([startMarker, endMarker]);
+        }
+
+        // 绘制驾车路线
+        function drawDrivingRoute(route) {
+            clearMap();
+            addStartEndMarkers();
+            
+            // 使用高德驾车规划API
+            const driving = new AMap.Driving({
+                map: map,
+                policy: AMap.DrivingPolicy.LEAST_TIME,
+                hideMarkers: true,
+                autoFitView: true
+            });
+            
+            driving.search(originCoord, destCoord, function(status, result) {
+                if (status === 'complete') {
+                    console.log('驾车路线规划成功');
+                } else {
+                    // 备用：手动绘制路线
+                    const polyline = new AMap.Polyline({
+                        path: route.pathCoords,
+                        strokeColor: '#f97316',
+                        strokeWeight: 6,
+                        strokeOpacity: 0.9,
+                        lineJoin: 'round',
+                        lineCap: 'round',
+                        showDir: true
+                    });
+                    currentPolylines.push(polyline);
+                    map.add(polyline);
+                    map.setFitView();
+                }
+            });
+            
+            // 更新图例
+            updateLegend('driving');
+        }
+
+        // 绘制公交/地铁路线
+        function drawTransitRoute(route) {
+            clearMap();
+            addStartEndMarkers();
+            
+            let allPoints = [];
+            
+            route.segments.forEach((segment, index) => {
+                if (segment.type === 'walking' && segment.coords) {
+                    // 步行路线 - 虚线
+                    const walkPath = segment.coords;
+                    allPoints = allPoints.concat(walkPath);
+                    
+                    const walkPolyline = new AMap.Polyline({
+                        path: walkPath,
+                        strokeColor: '#94a3b8',
+                        strokeWeight: 4,
+                        strokeStyle: 'dashed',
+                        strokeDasharray: [10, 5],
+                        strokeOpacity: 0.8
+                    });
+                    currentPolylines.push(walkPolyline);
+                    map.add(walkPolyline);
+                    
+                } else if (segment.type === 'metro' || segment.type === 'bus') {
+                    // 获取站点坐标
+                    const fromCoord = stationCoords[segment.from];
+                    const toCoord = stationCoords[segment.to];
+                    
+                    if (fromCoord && toCoord) {
+                        // 构建经过站点的路径
+                        let pathCoords = [fromCoord];
+                        
+                        segment.stops.forEach(stop => {
+                            if (stationCoords[stop]) {
+                                pathCoords.push(stationCoords[stop]);
+                            }
+                        });
+                        
+                        pathCoords.push(toCoord);
+                        allPoints = allPoints.concat(pathCoords);
+                        
+                        // 绘制线路
+                        const lineColor = segment.color || (segment.type === 'metro' ? '#0ea5e9' : '#10b981');
+                        const transitPolyline = new AMap.Polyline({
+                            path: pathCoords,
+                            strokeColor: lineColor,
+                            strokeWeight: 6,
+                            strokeOpacity: 0.9,
+                            lineJoin: 'round',
+                            lineCap: 'round',
+                            showDir: true
+                        });
+                        currentPolylines.push(transitPolyline);
+                        map.add(transitPolyline);
+                        
+                        // 添加站点标记
+                        pathCoords.forEach((coord, i) => {
+                            let stationName = '';
+                            if (i === 0) stationName = segment.from;
+                            else if (i === pathCoords.length - 1) stationName = segment.to;
+                            else stationName = segment.stops[i - 1];
+                            
+                            const isTerminal = i === 0 || i === pathCoords.length - 1;
+                            
+                            const stationMarker = new AMap.Marker({
+                                position: coord,
+                                content: `<div style="
+                                    background: ${isTerminal ? lineColor : 'white'};
+                                    width: ${isTerminal ? '12px' : '8px'};
+                                    height: ${isTerminal ? '12px' : '8px'};
+                                    border-radius: 50%;
+                                    border: 2px solid ${lineColor};
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                                "></div>`,
+                                offset: new AMap.Pixel(isTerminal ? -6 : -4, isTerminal ? -6 : -4),
+                                title: stationName
+                            });
+                            currentMarkers.push(stationMarker);
+                            map.add(stationMarker);
+                        });
+                    }
+                }
+            });
+            
+            // 自适应视野
+            if (allPoints.length > 0) {
+                map.setFitView(null, false, [50, 50, 50, 50]);
+            }
+            
+            // 更新图例
+            updateLegend('transit');
+        }
+
+        // 更新图例显示
+        function updateLegend(type) {
+            document.getElementById('legend-driving').style.display = type === 'driving' ? 'flex' : 'none';
+            document.getElementById('legend-metro').style.display = type === 'transit' ? 'flex' : 'none';
+            document.getElementById('legend-bus').style.display = type === 'transit' ? 'flex' : 'none';
+            document.getElementById('legend-walking').style.display = type === 'transit' ? 'flex' : 'none';
+        }
+
+        function selectTransport(type) {
+            currentTransport = type;
+            
+            document.querySelectorAll('.transport-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.transport-btn.${type}`).classList.add('active');
+            
+            document.querySelectorAll('.routes-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            
+            document.getElementById(`${type}-routes`).classList.add('active');
+            document.getElementById('route-details').classList.remove('active');
+        }
+
+        function selectRoute(type, index) {
+            currentRoute = { type, index };
+            
+            document.querySelectorAll('.route-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.closest('.route-btn').classList.add('active');
+            
+            const route = routesData[type][index];
+            showRouteDetails(route, type);
+        }
+
+        function showRouteDetails(route, type) {
+            const detailsPanel = document.getElementById('route-details');
+            const title = document.getElementById('details-title');
+            const summary = document.getElementById('details-summary');
+            const timeline = document.getElementById('route-timeline');
+            
+            title.textContent = route.name;
+            
+            // 生成摘要
+            let summaryHTML = `
+                <div class="summary-item">
+                    <div class="value">${route.duration}</div>
+                    <div class="label">分钟</div>
+                </div>
+            `;
+            
+            if (route.distance) {
+                summaryHTML += `
+                    <div class="summary-item">
+                        <div class="value">${route.distance}</div>
+                        <div class="label">公里</div>
+                    </div>
+                `;
+            }
+            
+            if (route.walkDistance) {
+                summaryHTML += `
+                    <div class="summary-item">
+                        <div class="value">${route.walkDistance}</div>
+                        <div class="label">步行公里</div>
+                    </div>
+                `;
+            }
+            
+            summaryHTML += `
+                <div class="summary-item cost">
+                    <div class="value">¥${route.cost}</div>
+                    <div class="label">预估费用</div>
+                </div>
+            `;
+            
+            summary.innerHTML = summaryHTML;
+            
+            // 生成时间线
+            let timelineHTML = '';
+            
+            if (type === 'taxi') {
+                route.steps.forEach(step => {
+                    timelineHTML += `
+                        <div class="timeline-item driving">
+                            <div class="timeline-header">
+                                <div class="timeline-type">
+                                    <span class="icon">🚕</span>
+                                    <span>驾车</span>
+                                </div>
+                                <div class="timeline-duration">约${step.duration}分钟</div>
+                            </div>
+                            <div class="timeline-content">${step.instruction}</div>
+                        </div>
+                    `;
+                });
+            } else {
+                route.segments.forEach(segment => {
+                    if (segment.type === 'walking') {
+                        timelineHTML += `
+                            <div class="timeline-item walking">
+                                <div class="timeline-header">
+                                    <div class="timeline-type">
+                                        <span class="icon">🚶</span>
+                                        <span>步行</span>
+                                    </div>
+                                    <div class="timeline-duration">约${segment.duration}分钟 · ${segment.distance}米</div>
+                                </div>
+                                <div class="timeline-content">${segment.instruction}</div>
+                            </div>
+                        `;
+                    } else if (segment.type === 'metro') {
+                        let stopsHTML = segment.stops.map(stop => 
+                            `<span class="stop-tag">${stop}</span>`
+                        ).join('');
+                        
+                        timelineHTML += `
+                            <div class="timeline-item transit">
+                                <div class="timeline-header">
+                                    <div class="timeline-type">
+                                        <span class="icon">🚇</span>
+                                        <span>${segment.line}</span>
+                                    </div>
+                                    <div class="timeline-duration">约${segment.duration}分钟 · ¥${segment.cost}</div>
+                                </div>
+                                <div class="timeline-content">
+                                    <strong>${segment.from}</strong> → <strong>${segment.to}</strong>
+                                </div>
+                                <div class="timeline-stops">
+                                    <span class="stop-tag highlight">${segment.from}</span>
+                                    ${stopsHTML}
+                                    <span class="stop-tag highlight">${segment.to}</span>
+                                </div>
+                            </div>
+                        `;
+                    } else if (segment.type === 'bus') {
+                        let stopsHTML = segment.stops.map(stop => 
+                            `<span class="stop-tag">${stop}</span>`
+                        ).join('');
+                        
+                        timelineHTML += `
+                            <div class="timeline-item bus-transit">
+                                <div class="timeline-header">
+                                    <div class="timeline-type">
+                                        <span class="icon">🚌</span>
+                                        <span>${segment.line}</span>
+                                    </div>
+                                    <div class="timeline-duration">约${segment.duration}分钟 · ¥${segment.cost}</div>
+                                </div>
+                                <div class="timeline-content">
+                                    <strong>${segment.from}</strong> → <strong>${segment.to}</strong>
+                                </div>
+                                <div class="timeline-stops">
+                                    <span class="stop-tag highlight">${segment.from}</span>
+                                    ${stopsHTML}
+                                    <span class="stop-tag highlight">${segment.to}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            timeline.innerHTML = timelineHTML;
+            detailsPanel.classList.add('active');
+            
+            // 初始化地图并绘制路线
+            if (!map) {
+                initMap();
+                map.on('complete', function() {
+                    if (type === 'taxi') {
+                        drawDrivingRoute(route);
+                    } else {
+                        drawTransitRoute(route);
+                    }
+                });
+            } else {
+                if (type === 'taxi') {
+                    drawDrivingRoute(route);
+                } else {
+                    drawTransitRoute(route);
+                }
+            }
+        }
+
+        function onTimeSelect() {
+            const timeInput = document.getElementById('currentTime');
+            selectedTime = timeInput.value;
+            
+            if (selectedTime) {
+                const stationGroup = document.getElementById('stationSelectGroup');
+                stationGroup.classList.add('active');
+                generateStationButtons();
+            }
+        }
+
+        function generateStationButtons() {
+            const stationGrid = document.getElementById('stationGrid');
+            let stationsHTML = '';
+            
+            Object.keys(allStations).forEach(lineName => {
+                const line = allStations[lineName];
+                line.stations.forEach(station => {
+                    stationsHTML += `
+                        <button class="station-btn" onclick="selectStation('${lineName}', '${station}')">
+                            ${station}
+                            <span class="line-tag">${lineName}</span>
+                        </button>
+                    `;
+                });
+            });
+            
+            stationGrid.innerHTML = stationsHTML;
+        }
+
+        function selectStation(lineName, stationName) {
+            document.querySelectorAll('.station-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            event.target.closest('.station-btn').classList.add('selected');
+            calculateResult(lineName, stationName);
+        }
+
+        function calculateResult(lineName, stationName) {
+            const resultDisplay = document.getElementById('resultDisplay');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultMessage = document.getElementById('resultMessage');
+            const resultDetail = document.getElementById('resultDetail');
+            
+            const [hours, minutes] = selectedTime.split(':').map(Number);
+            const selectedMinutes = hours * 60 + minutes;
+            const deadlineMinutes = 9 * 60;
+            
+            if (selectedMinutes >= deadlineMinutes) {
+                resultDisplay.className = 'result-display active danger';
+                resultIcon.textContent = '😱';
+                resultMessage.textContent = '你已经迟到了！';
+                
+                const remainingTime = calculateRemainingTime(lineName, stationName);
+                if (remainingTime) {
+                    const arrivalMinutes = selectedMinutes + remainingTime;
+                    const arrivalHours = Math.floor(arrivalMinutes / 60);
+                    const arrivalMins = arrivalMinutes % 60;
+                    resultDetail.textContent = `继续按原路线前进，预计 ${arrivalHours}:${arrivalMins.toString().padStart(2, '0')} 到达目的地`;
+                } else {
+                    resultDetail.textContent = '无法计算到达时间';
+                }
+                return;
+            }
+            
+            const timeUntilDeadline = deadlineMinutes - selectedMinutes;
+            const remainingTime = calculateRemainingTime(lineName, stationName);
+            
+            if (!remainingTime) {
+                resultDisplay.className = 'result-display active warning';
+                resultIcon.textContent = '❓';
+                resultMessage.textContent = '无法计算';
+                resultDetail.textContent = '请选择正确的线路站点';
+                return;
+            }
+            
+            if (remainingTime <= timeUntilDeadline - 5) {
+                resultDisplay.className = 'result-display active safe';
+                resultIcon.textContent = '😊';
+                resultMessage.textContent = '你不会迟到，继续按原路线前进！';
+                resultDetail.textContent = `距离9点还有 ${timeUntilDeadline} 分钟，预计还需 ${remainingTime} 分钟到达`;
+            } else {
+                resultDisplay.className = 'result-display active warning';
+                resultIcon.textContent = '😰';
+                resultMessage.textContent = '你要迟到了，赶快就近打车！';
+                resultDetail.textContent = `距离9点还有 ${timeUntilDeadline} 分钟，但按原路线需要约 ${remainingTime} 分钟`;
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('currentTime').value = `${hours}:${minutes}`;
+        });
+    </script>
+</body>
+</html>
